@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>세미나실 예약 키오스크</title>
+    <style>
+        /* [스타일 정의] 키오스크 UI 디자인 */
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none; /* 터치 시 텍스트 선택 방지 */
+        }
+
+        /* 키오스크 화면 프레임 */
+        #app {
+            width: 500px;
+            height: 800px;
+            background-color: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* 상단 헤더 */
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 홈 버튼 */
+        .home-btn {
+            background: none;
+            border: 1px solid white;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        /* 화면 컨테이너 (페이지들) */
+        .screen {
+            flex: 1;
+            padding: 20px;
+            display: none; /* 기본적으로 숨김 */
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .screen.active {
+            display: flex; /* 활성화된 화면만 보임 */
+        }
+
+        /* [페이지 1 & 2] 시간표 리스트 스타일 */
+        .time-slot {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            height: 60px;
+        }
+
+        .time-text {
+            font-size: 18px;
+            font-weight: bold;
+            width: 120px;
+        }
+
+        /* 상태 표시 박스 (김준성팀 등) */
+        .status-box {
+            flex: 1;
+            text-align: center;
+            font-size: 16px;
+            color: #555;
+        }
+
+        /* 버튼 스타일 */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-use { background-color: #27ae60; color: white; } /* 사용시작 */
+        .btn-disabled { background-color: #95a5a6; color: white; cursor: not-allowed; } /* 사용완료 */
+        .btn-reserve { background-color: #3498db; color: white; } /* 예약하기(이동) */
+        
+        /* 예약 선택 모드에서의 버튼 */
+        .slot-btn {
+            width: 100%;
+            height: 100%;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .slot-available { background-color: #e1f5fe; color: #0277bd; }
+        .slot-unavailable { background-color: #ffebee; color: #c62828; cursor: not-allowed; }
+        .slot-selected { background-color: #0277bd; color: white; }
+
+        /* 하단 고정 버튼 영역 */
+        .bottom-action {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+        }
+
+        .big-btn {
+            width: 100%;
+            padding: 15px;
+            background-color: #2c3e50;
+            color: white;
+            font-size: 20px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        /* [페이지 3] 키패드 스타일 */
+        .keypad-display {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 32px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+            height: 50px;
+            line-height: 50px;
+        }
+
+        .keypad-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .key-btn {
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            font-size: 24px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .key-btn:active { background-color: #ddd; }
+        .key-submit { background-color: #3498db; color: white; border: none; }
+        .key-clear { background-color: #e74c3c; color: white; border: none; }
+
+        /* 선택된 시간 표시 (예약화면 상단) */
+        .selected-time-info {
+            background-color: #fff3cd;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <header>
+        <span>3호관 204호 세미나실</span>
+        <button class="home-btn" onclick="goHome()">HOME</button>
+    </header>
+
+    <div id="screen-schedule" class="screen active">
+        <div id="schedule-list"></div>
+        <div class="bottom-action">
+            <button class="big-btn" onclick="goToReservation()">예약하기</button>
+        </div>
+    </div>
+
+    <div id="screen-reservation" class="screen">
+        <div class="selected-time-info" id="selected-time-display">
+            시간을 선택해주세요.
+        </div>
+        <div id="reservation-list"></div>
+        <div class="bottom-action">
+            <button class="big-btn" onclick="goToKeypad()">선택 완료</button>
+        </div>
+    </div>
+
+    <div id="screen-keypad" class="screen">
+        <div style="text-align: center; margin-bottom: 10px; font-size: 18px;">전화번호 입력</div>
+        <div class="keypad-display" id="phone-display">010-</div>
+        
+        <div class="keypad-grid">
+            <button class="key-btn" onclick="addNumber(1)">1</button>
+            <button class="key-btn" onclick="addNumber(2)">2</button>
+            <button class="key-btn" onclick="addNumber(3)">3</button>
+            <button class="key-btn" onclick="addNumber(4)">4</button>
+            <button class="key-btn" onclick="addNumber(5)">5</button>
+            <button class="key-btn" onclick="addNumber(6)">6</button>
+            <button class="key-btn" onclick="addNumber(7)">7</button>
+            <button class="key-btn" onclick="addNumber(8)">8</button>
+            <button class="key-btn" onclick="addNumber(9)">9</button>
+            <button class="key-btn key-clear" onclick="backspace()">←</button>
+            <button class="key-btn" onclick="addNumber(0)">0</button>
+            <button class="key-btn key-clear" onclick="clearPhone()">초기화</button>
+        </div>
+        <div class="bottom-action">
+            <button class="big-btn key-submit" onclick="submitReservation()">예약 확정</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // [데이터] 예약 데이터 (백엔드 대신 변수로 관리)
+    // state: 0(예약없음), 1(예약됨/사용전), 2(사용중), 3(사용완료)
+    let timeSlots = [
+        { time: "10:00", label: "10:00~11:00", state: 3, team: "김준성팀" }, // 사용완료
+        { time: "11:00", label: "11:00~12:00", state: 3, team: "김준성팀" },
+        { time: "12:00", label: "12:00~13:00", state: 3, team: "김준성팀" },
+        { time: "13:00", label: "13:00~14:00", state: 2, team: "준성김팀" }, // 사용중
+        { time: "14:00", label: "14:00~15:00", state: 1, team: "준성김팀" }, // 예약됨
+        { time: "15:00", label: "15:00~16:00", state: 1, team: "준성김팀" },
+        { time: "16:00", label: "16:00~17:00", state: 0, team: "" }, // 예약없음
+        { time: "17:00", label: "17:00~18:00", state: 0, team: "" }
+    ];
+
+    let selectedIndexes = []; // 사용자가 선택한 시간들의 인덱스 저장
+
+    // [초기화] 화면 로드 시 실행
+    window.onload = function() {
+        renderScheduleScreen();
+    };
+
+    // --- 화면 렌더링 함수들 ---
+
+    // 1. 일정 확인 화면 그리기
+    function renderScheduleScreen() {
+        const container = document.getElementById('schedule-list');
+        container.innerHTML = ''; // 초기화
+
+        timeSlots.forEach((slot, index) => {
+            let statusHtml = '';
+            
+            // 상태에 따른 버튼/텍스트 표시 로직
+            if (slot.state === 3) {
+                statusHtml = `<div class="status-box">${slot.team}</div><button class="btn btn-disabled">사용완료</button>`;
+            } else if (slot.state === 2) {
+                statusHtml = `<div class="status-box">${slot.team}</div><button class="btn btn-disabled" style="background-color:#e74c3c">사용중</button>`;
+            } else if (slot.state === 1) {
+                // 예약은 되어있으나 아직 사용 전 -> 본인인증 후 사용시작
+                statusHtml = `<div class="status-box">${slot.team}</div><button class="btn btn-use" onclick="startUse('${slot.team}')">사용시작</button>`;
+            } else {
+                // 예약 없음 -> 예약하기 버튼(예약화면으로 이동)
+                statusHtml = `<div class="status-box" style="color:#aaa">예약없음</div><button class="btn btn-reserve" onclick="goToReservation()">예약하기</button>`;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'time-slot';
+            div.innerHTML = `<div class="time-text">${slot.label}</div>${statusHtml}`;
+            container.appendChild(div);
+        });
+    }
+
+    // 2. 예약 선택 화면 그리기
+    function renderReservationScreen() {
+        const container = document.getElementById('reservation-list');
+        container.innerHTML = '';
+        selectedIndexes = []; // 선택 초기화
+        updateTimeDisplay();
+
+        timeSlots.forEach((slot, index) => {
+            const div = document.createElement('div');
+            div.className = 'time-slot';
+            
+            // 예약 가능한 시간(state 0)만 클릭 가능
+            if (slot.state === 0) {
+                div.innerHTML = `
+                    <div class="time-text">${slot.label}</div>
+                    <div style="flex:1;">
+                        <button id="slot-btn-${index}" class="btn slot-btn slot-available" onclick="toggleSelect(${index})">예약가능</button>
+                    </div>`;
+            } else {
+                div.innerHTML = `
+                    <div class="time-text">${slot.label}</div>
+                    <div style="flex:1;">
+                        <button class="btn slot-btn slot-unavailable">예약불가</button>
+                    </div>`;
+            }
+            container.appendChild(div);
+        });
+    }
+
+    // --- 기능 로직 ---
+
+    // 시간 슬롯 선택/해제 (토글)
+    function toggleSelect(index) {
+        const btn = document.getElementById(`slot-btn-${index}`);
+        
+        if (selectedIndexes.includes(index)) {
+            // 이미 선택됨 -> 해제
+            selectedIndexes = selectedIndexes.filter(i => i !== index);
+            btn.classList.remove('slot-selected');
+            btn.classList.add('slot-available');
+            btn.innerText = "예약가능";
+        } else {
+            // 선택 안됨 -> 선택
+            selectedIndexes.push(index);
+            btn.classList.remove('slot-available');
+            btn.classList.add('slot-selected');
+            btn.innerText = "선택됨";
+        }
+        updateTimeDisplay(); // 상단 시간 표시 업데이트
+    }
+
+    // "선택한 시간: 16시~18시" 계산 및 표시 로직
+    function updateTimeDisplay() {
+        const display = document.getElementById('selected-time-display');
+        
+        if (selectedIndexes.length === 0) {
+            display.innerText = "예약할 시간을 선택해주세요.";
+            return;
+        }
+
+        // 인덱스 정렬 (순서대로)
+        selectedIndexes.sort((a, b) => a - b);
+
+        // 연속된 시간인지 체크 (선택사항, 일단은 시작과 끝만 표시)
+        const firstIndex = selectedIndexes[0];
+        const lastIndex = selectedIndexes[selectedIndexes.length - 1];
+
+        const startTime = timeSlots[firstIndex].label.split('~')[0]; // "16:00"
+        const endTime = timeSlots[lastIndex].label.split('~')[1];   // "18:00"
+
+        display.innerText = `선택한 시간: ${startTime} ~ ${endTime}`;
+    }
+
+    // 사용 시작 버튼 (문자 인증 시뮬레이션)
+    function startUse(teamName) {
+        alert(`[인증요청] ${teamName} 님의 예약 번호로 인증 문자를 발송했습니다.\n인증 후 사용이 시작됩니다.`);
+        // 실제로는 상태를 '사용중'으로 바꾸고 화면 갱신
+        renderScheduleScreen();
+    }
+
+    // --- 키패드 로직 ---
+    let phoneNumber = "010-";
+
+    function updatePhoneDisplay() {
+        document.getElementById('phone-display').innerText = phoneNumber;
+    }
+
+    function addNumber(num) {
+        if (phoneNumber.length < 13) { // 010-0000-0000 형식 길이 제한
+            phoneNumber += num;
+            if (phoneNumber.length === 3 || phoneNumber.length === 8) {
+                phoneNumber += "-"; // 하이픈 자동 추가 로직 (간단 구현)
+            }
+            updatePhoneDisplay();
+        }
+    }
+
+    function backspace() {
+        if (phoneNumber.length > 4) { // "010-" 이후부터 지워짐
+            phoneNumber = phoneNumber.slice(0, -1);
+            updatePhoneDisplay();
+        }
+    }
+
+    function clearPhone() {
+        phoneNumber = "010-";
+        updatePhoneDisplay();
+    }
+
+    // 예약 확정 (최종 제출)
+    function submitReservation() {
+        if (selectedIndexes.length === 0) {
+            alert("선택된 시간이 없습니다.");
+            return;
+        }
+        if (phoneNumber.length < 10) {
+            alert("전화번호를 올바르게 입력해주세요.");
+            return;
+        }
+
+        // 데이터 업데이트 (메모리상)
+        selectedIndexes.forEach(index => {
+            timeSlots[index].state = 1; // 예약됨 상태로 변경
+            timeSlots[index].team = "신규 예약팀"; // 임시 팀명
+        });
+
+        alert("예약이 완료되었습니다.");
+        
+        // 홈으로 복귀
+        phoneNumber = "010-";
+        goHome();
+    }
+
+
+    // --- 화면 전환 함수들 ---
+    function hideAllScreens() {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    }
+
+    function goHome() {
+        hideAllScreens();
+        document.getElementById('screen-schedule').classList.add('active');
+        renderScheduleScreen(); // 데이터 갱신
+    }
+
+    function goToReservation() {
+        hideAllScreens();
+        document.getElementById('screen-reservation').classList.add('active');
+        renderReservationScreen();
+    }
+
+    function goToKeypad() {
+        if (selectedIndexes.length === 0) {
+            alert("시간을 먼저 선택해주세요.");
+            return;
+        }
+        hideAllScreens();
+        document.getElementById('screen-keypad').classList.add('active');
+        updatePhoneDisplay();
+    }
+
+</script>
+
+</body>
+</html>
